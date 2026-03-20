@@ -1,3 +1,5 @@
+import sys
+sys.path.append("./libs")
 import os.path
 import base64
 
