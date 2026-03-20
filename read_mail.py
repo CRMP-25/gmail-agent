@@ -1,21 +1,22 @@
 import sys
 sys.path.append("./libs")
-import os.path
-import base64
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-
-# 🔒 ONLY READ-ONLY ACCESS
-SCOPES = [
-    'https://www.googleapis.com/auth/gmail.readonly',
-    'https://www.googleapis.com/auth/gmail.send'
-]
-
+import imaplib
+import email
 import subprocess
+from datetime import datetime
 
+
+# ==============================
+# 🔐 CONFIG (CHANGE THIS)
+# ==============================
+EMAIL = "saiyesnew@gmail.com"
+PASSWORD = "sai@12345"   # ⚠️ Use Gmail App Password
+
+
+# ==============================
+# 🧠 LLM SUMMARY (OLLAMA)
+# ==============================
 def summarize_with_llama(text):
     prompt = f"Summarize these emails clearly:\n{text}"
 
@@ -29,8 +30,9 @@ def summarize_with_llama(text):
     return result.stdout.strip()
 
 
-from datetime import datetime
-
+# ==============================
+# 💾 SAVE SUMMARY
+# ==============================
 def save_summary(summary):
     now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     filename = f"summary_{now}.txt"
@@ -41,95 +43,47 @@ def save_summary(summary):
     print(f"\n💾 Summary saved to {filename}")
 
 
-import base64
-from email.mime.text import MIMEText
-
-def send_email(service, summary):
-    message = MIMEText(summary)
-    message['to'] = "saiyesnew@gmail.com"
-    message['from'] = "me"
-    message['subject'] = "🧠 AI Email Summary"
-
-    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
-
-    service.users().messages().send(
-        userId="me",
-        body={"raw": raw}
-    ).execute()
-
-    print("📧 Summary email sent successfully!")
-
-def get_gmail_service():
-    creds = None
-
-    # token.json stores login session
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-
-    # If no valid creds → login
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES
-            )
-            creds = flow.run_local_server(port=0)
-
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
-
-    return build('gmail', 'v1', credentials=creds)
-
-
+# ==============================
+# 📧 READ EMAILS (IMAP)
+# ==============================
 def read_latest_emails():
-    service = get_gmail_service()
+    mail = imaplib.IMAP4_SSL("imap.gmail.com")
+    mail.login(EMAIL, PASSWORD)
+    mail.select("inbox")
 
-    results = service.users().messages().list(
-        userId='me',
-        maxResults=5
-    ).execute()
-
-    messages = results.get('messages', [])
-
-    if not messages:
-        print("No emails found.")
-        return
+    status, messages = mail.search(None, "ALL")
+    mail_ids = messages[0].split()
 
     email_text = ""
 
-    for msg in messages:
-        msg_data = service.users().messages().get(
-            userId='me',
-            id=msg['id']
-        ).execute()
-
-        headers = msg_data['payload']['headers']
-
-        subject = next(
-            (h['value'] for h in headers if h['name'] == 'Subject'),
-            "No Subject"
-        )
-
-        sender = next(
-            (h['value'] for h in headers if h['name'] == 'From'),
-            "Unknown"
-        )
-
-        email_text += f"From: {sender}\nSubject: {subject}\n\n"
-
     print("\n📨 Raw Emails:\n")
-    print(email_text)
+
+    for i in mail_ids[-5:]:
+        status, msg_data = mail.fetch(i, "(RFC822)")
+        for response_part in msg_data:
+            if isinstance(response_part, tuple):
+                msg = email.message_from_bytes(response_part[1])
+
+                sender = msg["from"]
+                subject = msg["subject"]
+
+                print("From:", sender)
+                print("Subject:", subject)
+                print("-" * 40)
+
+                email_text += f"From: {sender}\nSubject: {subject}\n\n"
+
+    mail.logout()
 
     print("\n🧠 AI Summary:\n")
     summary = summarize_with_llama(email_text)
     print(summary)
 
     save_summary(summary)
-    # new
-    service = get_gmail_service()
-    send_email(service, summary)
 
 
+# ==============================
+# 🚀 ENTRY POINT
+# ==============================
 if __name__ == "__main__":
     read_latest_emails()
