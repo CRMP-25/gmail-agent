@@ -47,33 +47,20 @@ def save_summary(summary):
 # 📧 READ EMAILS (IMAP)
 # ==============================
 def read_latest_emails():
-    mail = imaplib.IMAP4_SSL("imap.gmail.com")
-    mail.login(EMAIL, PASSWORD)
-    mail.select("inbox")
+    print("\n📨 Using sample email data (sandbox mode)\n")
 
-    status, messages = mail.search(None, "ALL")
-    mail_ids = messages[0].split()
+    email_text = """
+    From: Google
+    Subject: Security alert
 
-    email_text = ""
+    From: ChatGPT
+    Subject: New features available
 
-    print("\n📨 Raw Emails:\n")
+    From: Team
+    Subject: Project update
+    """
 
-    for i in mail_ids[-5:]:
-        status, msg_data = mail.fetch(i, "(RFC822)")
-        for response_part in msg_data:
-            if isinstance(response_part, tuple):
-                msg = email.message_from_bytes(response_part[1])
-
-                sender = msg["from"]
-                subject = msg["subject"]
-
-                print("From:", sender)
-                print("Subject:", subject)
-                print("-" * 40)
-
-                email_text += f"From: {sender}\nSubject: {subject}\n\n"
-
-    mail.logout()
+    print(email_text)
 
     print("\n🧠 AI Summary:\n")
     summary = summarize_with_llama(email_text)
